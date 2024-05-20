@@ -123,8 +123,8 @@ class PhewasIndexing:
             sort=[{
                 "chr" if index != 'ieu-b' else "chr.keyword": {"order": "asc"},
                 "position": {"order": "asc"},
-                "effect_allele": {"order": "asc"},
-                "other_allele": {"order": "asc"}
+                "effect_allele" if index != 'ieu-b' else "effect_allele.keyword": {"order": "asc"},
+                "other_allele" if index != 'ieu-b' else "other_allele.keyword": {"order": "asc"}
             }],
             search_after=search_after
         )
