@@ -54,8 +54,8 @@ class PhewasIndexing:
                 "must": [
                     {
                         "term": {
-                            "gwas_id": {
-                                "value": str(id) if index != 'ieu-b' else str(id) + ".keyword"
+                            "gwas_id" if index != 'ieu-b' else "gwas_id.keyword": {
+                                "value": str(id)
                             }
                         }
                     },
