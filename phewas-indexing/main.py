@@ -54,7 +54,7 @@ class PhewasIndexing:
                 "must": [
                     {
                         "term": {
-                            "gwas_id" if index != 'ieu-b' else "gwas_id.keyword": {
+                            "gwas_id": {
                                 "value": str(id)
                             }
                         }
@@ -121,7 +121,7 @@ class PhewasIndexing:
             size=int(os.environ['BATCH_SIZE']),
             query=self._build_es_body_query(id, index),
             sort=[{
-                "chr": {"order": "asc"},
+                "chr" if index != 'ieu-b' else "chr.keyword": {"order": "asc"},
                 "position": {"order": "asc"},
                 "effect_allele": {"order": "asc"},
                 "other_allele": {"order": "asc"}
