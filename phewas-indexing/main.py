@@ -42,10 +42,11 @@ class PhewasIndexing:
         return index, id
 
     @staticmethod
-    def _build_es_body_query(id: Union[str, int]) -> dict:
+    def _build_es_body_query(id: Union[str, int], index: str) -> dict:
         """
         Build Elasticsearch query string
         :param id: the short GWAS ID
+        :param index: GWAS dataset prefix
         :return: query string
         """
         return {
@@ -54,7 +55,7 @@ class PhewasIndexing:
                     {
                         "term": {
                             "gwas_id": {
-                                "value": str(id)
+                                "value": str(id) if index != 'ieu-b' else str(id) + ".keyword"
                             }
                         }
                     },
@@ -79,7 +80,7 @@ class PhewasIndexing:
         result = self.es.count(
             index=index,
             body={
-                "query": self._build_es_body_query(id)
+                "query": self._build_es_body_query(id, index)
             }
         )
         return result['count']
@@ -118,7 +119,7 @@ class PhewasIndexing:
         result = self.es.search(
             index=index,
             size=int(os.environ['BATCH_SIZE']),
-            query=self._build_es_body_query(id),
+            query=self._build_es_body_query(id, index),
             sort=[{
                 "chr": {"order": "asc"},
                 "position": {"order": "asc"},
