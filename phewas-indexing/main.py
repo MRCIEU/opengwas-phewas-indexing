@@ -18,7 +18,7 @@ logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=os.en
 class PhewasIndexing:
     def __init__(self):
         _env = os.environ['ENV']
-        self.redis = redis.Redis(host=os.environ['REDIS_HOST_' + _env], port=os.environ['REDIS_PORT_' + _env], password=os.environ['REDIS_PASS'], db=os.environ['REDIS_DB_TASKS'])
+        self.redis = redis.Redis(host=os.environ['REDIS_HOST_' + _env], port=os.environ['REDIS_PORT_' + _env], password=os.environ['REDIS_PASS_' + _env], db=os.environ['REDIS_DB_TASKS'])
         self.es = Elasticsearch([f"{os.environ['ES_HOST_' + _env]}:{os.environ['ES_PORT']}"])
 
     def list_pending_tasks_in_redis(self) -> list:
