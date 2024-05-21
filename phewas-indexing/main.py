@@ -2,6 +2,7 @@ import os
 import re
 import time
 import logging
+from collections import defaultdict
 from math import floor, ceil
 from typing import Union
 from multiprocessing import Process
@@ -113,32 +114,43 @@ class PhewasIndexing:
         return result['hits']['hits']
 
     @staticmethod
-    def _build_redis_zadd_mapping(docs: list) -> dict:
+    def _build_redis_zadd_mappings(docs: list) -> (dict, dict):
         """
         Build mappings used for Redis ZADD
         :param docs: list of Elasticsearch documents
-        :return: dict of mappings used for ZADD, e.g. {'1:12345:A:T': ('PEHIBaCldykbaP579_By', '0.0470002'), '11:23456:G:C': ('PaCldykbaP57EHIB9_5y', '0.4270002')}
+        :return: two dicts of mapping used for ZADD, e.g. {'1': [('12345', 'A', 'T')], '11': [('23456', 'G', 'C')]} and {'1:12345:A:T': ('PEHIBaCldykbaP579_By', '0.0470002'), '11:23456:G:C': ('PaCldykbaP57EHIB9_5y', '0.4270002')}
         """
+        cpalleles = defaultdict(list)
         phewas = {}
         for doc in docs:
             _source = doc['_source']
+            cpalleles[_source['chr']].append((_source['position'], _source['effect_allele'], _source['other_allele']))
             phewas['{}:{}:{}:{}'.format(_source['chr'], _source['position'], _source['effect_allele'], _source['other_allele'])] = (doc['_id'], _source['p'])
-        return phewas
+        return cpalleles, phewas
 
-    def add_to_redis(self, gwas_id: str, phewas: dict) -> None:
+    def add_to_redis(self, cpalleles: dict, phewas: dict) -> None:
         """
         Add members and scores to Redis sorted set
-        :param gwas_id: the full GWAS ID
-        :param phewas: the mapping string for ZADD
+        :param cpalleles: the cpalleles mapping dict for ZADD
+        :param phewas: the phewas mapping dict for ZADD
         :return: None
         """
         t = time.time()
+
+        self.redis.select(int(os.environ['REDIS_DB_CPALLELES']))
+        pipe = self.redis.pipeline()
+        for chr, pos_ea_oa_tuples in cpalleles.items():
+            pipe.zadd(chr, {'{}:{}:{}'.format(peo[0], peo[1], peo[2]): peo[0] for peo in pos_ea_oa_tuples})
+        results_cpalleles = pipe.execute()
+        t2 = time.time()
+
         self.redis.select(int(os.environ['REDIS_DB_PHEWAS']))
         pipe = self.redis.pipeline()
-        for key, docid_pval in phewas.items():
-            pipe.zadd(key, {docid_pval[0]: docid_pval[1]})
-        results = pipe.execute()
-        logging.debug('Added to redis: {}, spent {} s'.format(str(results.count(True)), str(round(time.time() - t, 3))))
+        for chr_pos_ea_oa, docid_pval in phewas.items():
+            pipe.zadd(chr_pos_ea_oa, {docid_pval[0]: docid_pval[1]})
+        results_phewas = pipe.execute()
+
+        logging.debug('Added to redis: {} ({} s), {} ({} s)'.format(str(results_cpalleles.count(True)), str(round(t2 - t, 3)), str(results_phewas.count(True)), str(round(time.time() - t2, 3))))
 
     @retry(tries=10, delay=10)
     def run_for_single_dataset(self, gwas_id: str) -> tuple[bool, int]:
@@ -156,8 +168,8 @@ class PhewasIndexing:
         search_after = None
         i = 0
         while len(batch := self.get_es_docs_by_batch(index, id, search_after)) > 0:
-            phewas = self._build_redis_zadd_mapping(batch)
-            self.add_to_redis(gwas_id, phewas)
+            cpalleles, phewas = self._build_redis_zadd_mappings(batch)
+            self.add_to_redis(cpalleles, phewas)
             search_after = batch[-1]['sort']
             i += 1
             logging.debug('Current batch seq {}, next search after {}'.format(i, search_after))
