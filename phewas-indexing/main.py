@@ -3,6 +3,7 @@ import re
 import time
 import logging
 from typing import Union
+from multiprocessing import Process
 
 from dotenv import load_dotenv
 import redis
@@ -177,11 +178,33 @@ class PhewasIndexing:
             logging.info('Reported {} as failed'.format(gwas_id))
 
 
+def single_process(gwas_id: str) -> None:
+    """
+    The target function used by multiprocessing.
+    :param gwas_id: the full GWAS ID
+    :return: None
+    """
+    logging.info('Process for {} started'.format(gwas_id))
+    pi = PhewasIndexing()
+    t = time.time()
+    successful, n_docs = pi.run_for_single_dataset(gwas_id)
+    pi.report_task_status_to_redis(gwas_id, successful, n_docs)
+    logging.info('Process for {} completed in {} s'.format(gwas_id, str(round(time.time() - t, 3))))
+
+
 if __name__ == '__main__':
     pi = PhewasIndexing()
+    max_proc = os.environ['MAX_PROC']
     while True:
-        if len(tasks := pi.list_pending_tasks_in_redis()) > 0:
-            for gwas_id in tasks:
-                successful, n_docs = pi.run_for_single_dataset(gwas_id)
-                pi.report_task_status_to_redis(gwas_id, successful, n_docs)
+        tasks = pi.list_pending_tasks_in_redis()
+        while len(tasks) > 0:
+            processes = []
+            n_proc = min(max_proc, len(tasks))
+            for i in range(n_proc):
+                proc = Process(target=single_process, args=(tasks[i],))
+                proc.start()
+                processes.append(proc)
+            for proc in processes:
+                proc.join()
+            tasks = tasks[n_proc:]
         time.sleep(60)
