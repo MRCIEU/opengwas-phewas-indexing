@@ -80,6 +80,7 @@ class PhewasIndexing:
         :return: number of Elasticsearch documents
         """
         result = self.es.count(
+            request_timeout=30,
             index=index,
             body={
                 "query": self._build_es_body_query(id, index)
