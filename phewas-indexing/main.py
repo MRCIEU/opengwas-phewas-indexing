@@ -1,4 +1,5 @@
 import os
+import random
 import re
 import time
 import logging
@@ -216,11 +217,8 @@ if __name__ == '__main__':
     n_proc = int(os.environ['N_PROC'])
     while True:
         while len(tasks := pi.list_pending_tasks_in_redis()) > 0:
-            # if n_proc = 3, tasks of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] will be divided into [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10]]
-            tasks_allocated_to_proc = [[] for i in range(n_proc)]
-            size = ceil(len(tasks) / n_proc)
-            for i in range(len(tasks)):
-                tasks_allocated_to_proc[floor(i / size)].append(tasks[i])
+            random.shuffle(tasks)
+            tasks_allocated_to_proc = [tasks[i::n_proc] for i in range(n_proc)]  # if n_proc = 3, tasks of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] will be divided into [[1, 4, 7, 10], [2, 5, 8], [3, 6, 9]]
             processes = []
             for proc_id in range(n_proc):
                 if len(tasks_allocated_to_proc[proc_id]) > 0:
