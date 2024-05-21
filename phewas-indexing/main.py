@@ -133,7 +133,7 @@ class PhewasIndexing:
         for key, docid_pval in phewas.items():
             pipe.zadd(key, {docid_pval[0]: docid_pval[1]})
         results = pipe.execute()
-        logging.info('Added to redis: {}, spent {} s'.format(str(results.count(True)), str(time.time() - t)))
+        logging.info('Added to redis: {}, spent {} s'.format(str(results.count(True)), str(round(time.time() - t, 3))))
 
     @retry(tries=10, delay=10)
     def run_for_single_dataset(self, gwas_id: str) -> tuple[bool, int]:
