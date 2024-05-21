@@ -153,7 +153,7 @@ class PhewasIndexing:
         self.redis.select(int(os.environ['REDIS_DB_PHEWAS']))
         pipe = self.redis.pipeline()
         for key, docid_pval in phewas.items():
-            pipe.zadd(key, {gwas_id + ',' + docid_pval[0]: docid_pval[1]})
+            pipe.zadd(key, {docid_pval[0]: docid_pval[1]})
         results = pipe.execute()
         logging.info('Added to redis: ' + str(results.count(True)))
 
