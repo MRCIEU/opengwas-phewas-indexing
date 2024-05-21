@@ -62,7 +62,7 @@ class PhewasIndexing:
                     {
                         "range": {
                             "p": {
-                                "lte": 0.05
+                                "lte": 0.01
                             }
                         }
                     }
