@@ -85,29 +85,6 @@ class PhewasIndexing:
         )
         return result['count']
 
-    @retry(tries=10, delay=10)
-    def run_for_single_dataset(self, gwas_id: str) -> tuple[bool, int]:
-        """
-        For a single GWAS dataset, count docs, then transform and add to Redis by batch
-        :param gwas_id: the full GWAS ID
-        :return: successful or not, number of docs in Elasticsearch
-        """
-        try:
-            index, id = self._split_index_and_id(gwas_id)
-        except AttributeError:
-            return False, -1
-        n_docs = self.count_docs(index, id)
-        logging.info('{} has {} docs'.format(gwas_id, n_docs))
-        search_after = None
-        i = 0
-        while len(batch := self.get_es_docs_by_batch(index, id, search_after)) > 0:
-            phewas = self._build_redis_zadd_mapping(batch)
-            self.add_to_redis(gwas_id, phewas)
-            search_after = batch[-1]['sort']
-            i += 1
-            logging.info('Current batch seq {}, next search after {}'.format(i, search_after))
-        return True, n_docs
-
     def get_es_docs_by_batch(self, index: str, id: Union[str, int], search_after: dict) -> list:
         """
         Fetch Elasticsearch documents by batch
@@ -150,12 +127,36 @@ class PhewasIndexing:
         :param phewas: the mapping string for ZADD
         :return: None
         """
+        t = time.time()
         self.redis.select(int(os.environ['REDIS_DB_PHEWAS']))
         pipe = self.redis.pipeline()
         for key, docid_pval in phewas.items():
             pipe.zadd(key, {docid_pval[0]: docid_pval[1]})
         results = pipe.execute()
-        logging.info('Added to redis: ' + str(results.count(True)))
+        logging.info('Added to redis: {}, spent {} s'.format(str(results.count(True)), str(time.time() - t)))
+
+    @retry(tries=10, delay=10)
+    def run_for_single_dataset(self, gwas_id: str) -> tuple[bool, int]:
+        """
+        For a single GWAS dataset, count docs, then transform and add to Redis by batch
+        :param gwas_id: the full GWAS ID
+        :return: successful or not, number of docs in Elasticsearch
+        """
+        try:
+            index, id = self._split_index_and_id(gwas_id)
+        except AttributeError:
+            return False, -1
+        n_docs = self.count_docs(index, id)
+        logging.info('{} has {} docs'.format(gwas_id, n_docs))
+        search_after = None
+        i = 0
+        while len(batch := self.get_es_docs_by_batch(index, id, search_after)) > 0:
+            phewas = self._build_redis_zadd_mapping(batch)
+            self.add_to_redis(gwas_id, phewas)
+            search_after = batch[-1]['sort']
+            i += 1
+            logging.info('Current batch seq {}, next search after {}'.format(i, search_after))
+        return True, n_docs
 
     def report_task_status_to_redis(self, gwas_id: str, successful: bool, n_docs: int) -> None:
         """
