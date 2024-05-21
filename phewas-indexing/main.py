@@ -2,6 +2,7 @@ import os
 import re
 import time
 import logging
+from math import floor, ceil
 from typing import Union
 from multiprocessing import Process
 
@@ -97,7 +98,7 @@ class PhewasIndexing:
         :return: list of Elasticsearch documents
         """
         result = self.es.search(
-            request_timeout=60,
+            request_timeout=90,
             index=index,
             size=int(os.environ['BATCH_SIZE']),
             query=self._build_es_body_query(id, index),
@@ -203,7 +204,11 @@ if __name__ == '__main__':
     n_proc = int(os.environ['N_PROC'])
     while True:
         while len(tasks := pi.list_pending_tasks_in_redis()) > 0:
-            tasks_allocated_to_proc = [tasks[i::n_proc] for i in range(n_proc)]  # if n_proc = 3, tasks of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] will be divided into [[1, 4, 7, 10], [2, 5, 8], [3, 6, 9]]
+            # if n_proc = 3, tasks of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] will be divided into [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10]]
+            tasks_allocated_to_proc = [[] for i in range(n_proc)]
+            size = ceil(len(tasks) / n_proc)
+            for i in range(len(tasks)):
+                tasks_allocated_to_proc[floor(i / size)].append(tasks[i])
             processes = []
             for proc_id in range(n_proc):
                 if len(tasks_allocated_to_proc[proc_id]) > 0:
