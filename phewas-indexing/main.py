@@ -14,6 +14,7 @@ from retry import retry
 load_dotenv()
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=os.environ['LOGGING_LEVEL'])
+logging.getLogger('elasticsearch').setLevel(logging.WARNING)
 
 
 class PhewasIndexing:
@@ -135,7 +136,7 @@ class PhewasIndexing:
         for key, docid_pval in phewas.items():
             pipe.zadd(key, {docid_pval[0]: docid_pval[1]})
         results = pipe.execute()
-        logging.info('Added to redis: {}, spent {} s'.format(str(results.count(True)), str(round(time.time() - t, 3))))
+        logging.debug('Added to redis: {}, spent {} s'.format(str(results.count(True)), str(round(time.time() - t, 3))))
 
     @retry(tries=10, delay=10)
     def run_for_single_dataset(self, gwas_id: str) -> tuple[bool, int]:
@@ -157,7 +158,7 @@ class PhewasIndexing:
             self.add_to_redis(gwas_id, phewas)
             search_after = batch[-1]['sort']
             i += 1
-            logging.info('Current batch seq {}, next search after {}'.format(i, search_after))
+            logging.debug('Current batch seq {}, next search after {}'.format(i, search_after))
         return True, n_docs
 
     def report_task_status_to_redis(self, gwas_id: str, successful: bool, n_docs: int) -> None:
@@ -186,12 +187,14 @@ def single_process(proc_id: int, tasks: list) -> None:
     :return: None
     """
     logging.info('Process {} started'.format(proc_id))
-    t = time.time()
+    tp = time.time()
     pi = PhewasIndexing()
     for gwas_id in tasks:
+        tt = time.time()
         successful, n_docs = pi.run_for_single_dataset(gwas_id)
         pi.report_task_status_to_redis(gwas_id, successful, n_docs)
-    logging.info('Process {} completed in {} s'.format(proc_id, str(round(time.time() - t, 3))))
+        logging.info('Task {} completed in {} s'.format(gwas_id, str(round(time.time() - tt, 3))))
+    logging.info('Process {} ended in {} s'.format(proc_id, str(round(time.time() - tp, 3))))
 
 
 if __name__ == '__main__':
