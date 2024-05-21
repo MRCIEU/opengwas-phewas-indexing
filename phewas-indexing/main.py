@@ -178,33 +178,35 @@ class PhewasIndexing:
             logging.info('Reported {} as failed'.format(gwas_id))
 
 
-def single_process(gwas_id: str) -> None:
+def single_process(proc_id: int, tasks: list) -> None:
     """
     The target function used by multiprocessing.
-    :param gwas_id: the full GWAS ID
+    :param proc_id: the process ID
+    :param tasks: a list of the full GWAS IDs in this process
     :return: None
     """
-    logging.info('Process for {} started'.format(gwas_id))
-    pi = PhewasIndexing()
+    logging.info('Process {} started'.format(proc_id))
     t = time.time()
-    successful, n_docs = pi.run_for_single_dataset(gwas_id)
-    pi.report_task_status_to_redis(gwas_id, successful, n_docs)
-    logging.info('Process for {} completed in {} s'.format(gwas_id, str(round(time.time() - t, 3))))
+    pi = PhewasIndexing()
+    for gwas_id in tasks:
+        successful, n_docs = pi.run_for_single_dataset(gwas_id)
+        pi.report_task_status_to_redis(gwas_id, successful, n_docs)
+    logging.info('Process {} completed in {} s'.format(proc_id, str(round(time.time() - t, 3))))
 
 
 if __name__ == '__main__':
     pi = PhewasIndexing()
-    max_proc = os.environ['MAX_PROC']
+    n_proc = int(os.environ['N_PROC'])
     while True:
         tasks = pi.list_pending_tasks_in_redis()
+        tasks_allocated_to_proc = [tasks[i::n_proc] for i in range(n_proc)]  # if n_proc = 3, tasks of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] will be divided into [[1, 4, 7, 10], [2, 5, 8], [3, 6, 9]]
         while len(tasks) > 0:
             processes = []
-            n_proc = min(max_proc, len(tasks))
-            for i in range(n_proc):
-                proc = Process(target=single_process, args=(tasks[i],))
-                proc.start()
-                processes.append(proc)
+            for proc_id in range(n_proc):
+                if len(tasks_allocated_to_proc[proc_id]) > 0:
+                    proc = Process(target=single_process, args=(proc_id, tasks_allocated_to_proc[proc_id]))
+                    proc.start()
+                    processes.append(proc)
             for proc in processes:
                 proc.join()
-            tasks = tasks[n_proc:]
         time.sleep(60)
