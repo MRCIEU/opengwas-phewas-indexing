@@ -94,6 +94,7 @@ class PhewasIndexing:
         :return: list of Elasticsearch documents
         """
         result = self.es.search(
+            request_timeout=60,
             index=index,
             size=int(os.environ['BATCH_SIZE']),
             query=self._build_es_body_query(id, index),
