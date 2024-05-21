@@ -202,9 +202,8 @@ if __name__ == '__main__':
     pi = PhewasIndexing()
     n_proc = int(os.environ['N_PROC'])
     while True:
-        tasks = pi.list_pending_tasks_in_redis()
-        tasks_allocated_to_proc = [tasks[i::n_proc] for i in range(n_proc)]  # if n_proc = 3, tasks of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] will be divided into [[1, 4, 7, 10], [2, 5, 8], [3, 6, 9]]
-        while len(tasks) > 0:
+        while len(tasks := pi.list_pending_tasks_in_redis()) > 0:
+            tasks_allocated_to_proc = [tasks[i::n_proc] for i in range(n_proc)]  # if n_proc = 3, tasks of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] will be divided into [[1, 4, 7, 10], [2, 5, 8], [3, 6, 9]]
             processes = []
             for proc_id in range(n_proc):
                 if len(tasks_allocated_to_proc[proc_id]) > 0:
