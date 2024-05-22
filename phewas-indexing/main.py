@@ -193,6 +193,37 @@ class PhewasIndexing:
             self.redis.zadd('failed', {gwas_id: int(time.time())})
             logging.info('Reported {} as failed'.format(gwas_id))
 
+    def count_members_in_redis(self) -> (int, int):
+        """
+        DANGER: THE LUA SCRIPT WILL BLOCK ALL OTHER QUERIES TO THE SERVER. THIS MAY TAKE SEVERAL MINUTES. Run a lua script to count the number of members across all keys in a database
+        :return: number of chr:pos:ea:oa combinations, number of Elasticsearch document
+        """
+        t = time.time()
+        self.redis.script_flush()
+        lua = """
+        redis.call('SELECT', ARGV[1])
+        local sum = 0
+        local keys = redis.call('KEYS', '*')
+        for _, key in ipairs(keys) do
+            local card = redis.call('ZCARD', key)
+            sum = sum + card
+        end
+        return sum
+        """
+        script = self.redis.register_script(lua)
+        t2 = time.time()
+        logging.info('Script registered as {} in {} s'.format(script.sha, str(round(t2 - t, 3))))
+
+        count_cpalleles = script(args=[int(os.environ['REDIS_DB_CPALLELES'])])
+        t3 = time.time()
+        logging.info('Count {} cpalleles in {} s'.format(str(count_cpalleles), str(round(t3 - t2, 3))))
+
+        count_phewas = script(args=[int(os.environ['REDIS_DB_PHEWAS'])])
+        t4 = time.time()
+        logging.info('Count {} docs in {} s'.format(str(count_phewas), str(round(t4 - t3, 3))))
+
+        return count_cpalleles, count_phewas
+
 
 def single_process(proc_id: int, tasks: list) -> None:
     """
