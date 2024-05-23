@@ -36,21 +36,20 @@ class PhewasIndexing:
         return [t.decode('ascii') for t in tasks]
 
     @staticmethod
-    def _split_index_and_id(gwas_id: str) -> tuple[str, str]:
+    def _split_prefix_and_id(gwas_id: str) -> tuple[str, str]:
         """
         Split the full GWAS ID into prefix and ID
         :param gwas_id: the full GWAS ID
-        :returns: GWAS dataset prefix (index), ID
+        :returns: GWAS dataset prefix and ID, e.g. 'ieu-b', '5122'
         """
-        index, id = re.match(r'^([\w]+-[\w]+)-([\w]+)', gwas_id).groups()
-        return index, id
+        prefix, id = re.match(r'^([\w]+-[\w]+)-([\w]+)', gwas_id).groups()
+        return prefix, id
 
     @staticmethod
-    def _build_es_body_query(id: Union[str, int], index: str) -> dict:
+    def _build_es_body_query(id: Union[str, int]) -> dict:
         """
         Build Elasticsearch query string
         :param id: the short GWAS ID
-        :param index: GWAS dataset prefix
         :return: query string
         """
         return {
@@ -74,51 +73,50 @@ class PhewasIndexing:
             }
         }
 
-    def count_docs(self, index: str, id: Union[str, int]):
+    def count_docs(self, prefix: str, id: Union[str, int]):
         """
         Count the number of Elasticsearch documents
-        :param index: GWAS dataset prefix
+        :param prefix: GWAS dataset prefix
         :param id: the short GWAS ID
         :return: number of Elasticsearch documents
         """
         result = self.es.count(
             request_timeout=30,
-            index=index,
+            index=prefix,
             body={
-                "query": self._build_es_body_query(id, index)
+                "query": self._build_es_body_query(id)
             }
         )
         return result['count']
 
-    def get_es_docs_by_chunk(self, index: str, id: Union[str, int], search_after: dict) -> list:
+    def get_es_docs_by_chunk(self, prefix: str, id: Union[str, int], search_after: dict) -> list:
         """
         Fetch Elasticsearch documents by chunk
-        :param index: GWAS dataset prefix, e.g. ebi-a
+        :param prefix: GWAS dataset prefix, e.g. ebi-a
         :param id: the short GWAS ID
         :param search_after: the search_after parameter for Elasticsearch, obtained from the last hit
         :return: list of Elasticsearch documents
         """
         result = self.es.search(
             request_timeout=90,
-            index=index,
+            index=prefix,
             size=int(os.environ['CHUNK_SIZE']),
-            query=self._build_es_body_query(id, index),
+            query=self._build_es_body_query(id),
             sort=[{
-                "chr" if index != 'ieu-b' else "chr.keyword": {"order": "asc"},
+                "chr" if prefix != 'ieu-b' else "chr.keyword": {"order": "asc"},
                 "position": {"order": "asc"},
-                "effect_allele" if index != 'ieu-b' else "effect_allele.keyword": {"order": "asc"},
-                "other_allele" if index != 'ieu-b' else "other_allele.keyword": {"order": "asc"}
+                "effect_allele" if prefix != 'ieu-b' else "effect_allele.keyword": {"order": "asc"},
+                "other_allele" if prefix != 'ieu-b' else "other_allele.keyword": {"order": "asc"}
             }],
             search_after=search_after
         )
         return result['hits']['hits']
 
     @staticmethod
-    def _build_redis_zadd_mappings(docs: list, index: str) -> (dict, dict):
+    def _build_redis_zadd_mappings(docs: list) -> (dict, dict):
         """
         Build mappings used for Redis ZADD
         :param docs: list of Elasticsearch documents
-        :param index: GWAS dataset prefix, e.g. ebi-a
         :return: two dicts of mapping used for ZADD, e.g. {'1': [('12345', 'A', 'T')], '11': [('23456', 'G', 'C')]} and {'1:12345:A:T': ('PEHIBaCldykbaP579_By', '0.0470002'), '11:23456:G:C': ('PaCldykbaP57EHIB9_5y', '0.4270002')}
         """
         cpalleles = defaultdict(list)
@@ -126,7 +124,7 @@ class PhewasIndexing:
         for doc in docs:
             _source = doc['_source']
             cpalleles[_source['chr']].append((_source['position'], _source['effect_allele'], _source['other_allele']))
-            cpalleles_docids['{}:{}:{}:{}'.format(_source['chr'], _source['position'], _source['effect_allele'], _source['other_allele'])] = (index, doc['_id'], _source['p'])
+            cpalleles_docids['{}:{}:{}:{}'.format(_source['chr'], _source['position'], _source['effect_allele'], _source['other_allele'])] = (doc['_index'], doc['_id'], _source['p'])
         return cpalleles, cpalleles_docids
 
     def add_to_redis(self, cpalleles: dict, cpalleles_docids: dict) -> None:
@@ -161,15 +159,15 @@ class PhewasIndexing:
         :return: successful or not, number of docs in Elasticsearch
         """
         try:
-            index, id = self._split_index_and_id(gwas_id)
+            prefix, id = self._split_prefix_and_id(gwas_id)
         except AttributeError:
             return False, -1
-        n_docs = self.count_docs(index, id)
+        n_docs = self.count_docs(prefix, id)
         logging.info('{} has {} docs'.format(gwas_id, n_docs))
         search_after = None
         i = 0
-        while len(chunk := self.get_es_docs_by_chunk(index, id, search_after)) > 0:
-            cpalleles, cpalleles_docids = self._build_redis_zadd_mappings(chunk, index)
+        while len(chunk := self.get_es_docs_by_chunk(prefix, id, search_after)) > 0:
+            cpalleles, cpalleles_docids = self._build_redis_zadd_mappings(chunk)
             self.add_to_redis(cpalleles, cpalleles_docids)
             search_after = chunk[-1]['sort']
             i += 1
