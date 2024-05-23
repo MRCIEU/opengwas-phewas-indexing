@@ -90,10 +90,10 @@ class PhewasIndexing:
         )
         return result['count']
 
-    def get_es_docs_by_batch(self, index: str, id: Union[str, int], search_after: dict) -> list:
+    def get_es_docs_by_chunk(self, index: str, id: Union[str, int], search_after: dict) -> list:
         """
-        Fetch Elasticsearch documents by batch
-        :param index: GWAS dataset prefix
+        Fetch Elasticsearch documents by chunk
+        :param index: GWAS dataset prefix, e.g. ebi-a
         :param id: the short GWAS ID
         :param search_after: the search_after parameter for Elasticsearch, obtained from the last hit
         :return: list of Elasticsearch documents
@@ -101,7 +101,7 @@ class PhewasIndexing:
         result = self.es.search(
             request_timeout=90,
             index=index,
-            size=int(os.environ['BATCH_SIZE']),
+            size=int(os.environ['CHUNK_SIZE']),
             query=self._build_es_body_query(id, index),
             sort=[{
                 "chr" if index != 'ieu-b' else "chr.keyword": {"order": "asc"},
@@ -114,10 +114,11 @@ class PhewasIndexing:
         return result['hits']['hits']
 
     @staticmethod
-    def _build_redis_zadd_mappings(docs: list) -> (dict, dict):
+    def _build_redis_zadd_mappings(docs: list, index: str) -> (dict, dict):
         """
         Build mappings used for Redis ZADD
         :param docs: list of Elasticsearch documents
+        :param index: GWAS dataset prefix, e.g. ebi-a
         :return: two dicts of mapping used for ZADD, e.g. {'1': [('12345', 'A', 'T')], '11': [('23456', 'G', 'C')]} and {'1:12345:A:T': ('PEHIBaCldykbaP579_By', '0.0470002'), '11:23456:G:C': ('PaCldykbaP57EHIB9_5y', '0.4270002')}
         """
         cpalleles = defaultdict(list)
@@ -125,7 +126,7 @@ class PhewasIndexing:
         for doc in docs:
             _source = doc['_source']
             cpalleles[_source['chr']].append((_source['position'], _source['effect_allele'], _source['other_allele']))
-            cpalleles_docids['{}:{}:{}:{}'.format(_source['chr'], _source['position'], _source['effect_allele'], _source['other_allele'])] = (doc['_id'], _source['p'])
+            cpalleles_docids['{}:{}:{}:{}'.format(_source['chr'], _source['position'], _source['effect_allele'], _source['other_allele'])] = (index, doc['_id'], _source['p'])
         return cpalleles, cpalleles_docids
 
     def add_to_redis(self, cpalleles: dict, cpalleles_docids: dict) -> None:
@@ -146,8 +147,8 @@ class PhewasIndexing:
 
         self.redis.select(int(os.environ['REDIS_DB_DOCIDS']))
         pipe = self.redis.pipeline()
-        for chr_pos_ea_oa, docid_pval in cpalleles_docids.items():
-            pipe.zadd(chr_pos_ea_oa, {docid_pval[0]: docid_pval[1]})
+        for chr_pos_ea_oa, index_docid_pval in cpalleles_docids.items():
+            pipe.zadd(chr_pos_ea_oa, {index_docid_pval[0] + ',' + index_docid_pval[1]: index_docid_pval[2]})
         results_cpalleles_docids = pipe.execute()
 
         logging.debug('Added to redis: {} ({} s), {} ({} s)'.format(str(results_cpalleles.count(True)), str(round(t2 - t, 3)), str(results_cpalleles_docids.count(True)), str(round(time.time() - t2, 3))))
@@ -155,7 +156,7 @@ class PhewasIndexing:
     @retry(tries=10, delay=10)
     def run_for_single_dataset(self, gwas_id: str) -> tuple[bool, int]:
         """
-        For a single GWAS dataset, count docs, then transform and add to Redis by batch
+        For a single GWAS dataset, count docs, then transform and add to Redis by chunk
         :param gwas_id: the full GWAS ID
         :return: successful or not, number of docs in Elasticsearch
         """
@@ -167,12 +168,12 @@ class PhewasIndexing:
         logging.info('{} has {} docs'.format(gwas_id, n_docs))
         search_after = None
         i = 0
-        while len(batch := self.get_es_docs_by_batch(index, id, search_after)) > 0:
-            cpalleles, cpalleles_docids = self._build_redis_zadd_mappings(batch)
+        while len(chunk := self.get_es_docs_by_chunk(index, id, search_after)) > 0:
+            cpalleles, cpalleles_docids = self._build_redis_zadd_mappings(chunk, index)
             self.add_to_redis(cpalleles, cpalleles_docids)
-            search_after = batch[-1]['sort']
+            search_after = chunk[-1]['sort']
             i += 1
-            logging.debug('Current batch seq {}, next search after {}'.format(i, search_after))
+            logging.debug('Current chunk seq {}, next search after {}'.format(i, search_after))
         return True, n_docs
 
     def report_task_status_to_redis(self, gwas_id: str, successful: bool, n_docs: int) -> None:
