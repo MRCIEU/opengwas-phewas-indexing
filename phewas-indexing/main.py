@@ -148,7 +148,7 @@ class PhewasIndexing:
         self.redis.select(int(os.environ['REDIS_DB_DOCIDS']))
         pipe = self.redis.pipeline()
         for chr_pos_ea_oa, index_docid_pval in cpalleles_docids.items():
-            pipe.zadd(chr_pos_ea_oa, {index_docid_pval[0] + ',' + index_docid_pval[1]: index_docid_pval[2]})
+            pipe.zadd(chr_pos_ea_oa, {index_docid_pval[0] + ':' + index_docid_pval[1]: index_docid_pval[2]})
         results_cpalleles_docids = pipe.execute()
 
         logging.debug('Added to redis: {} ({} s), {} ({} s)'.format(str(results_cpalleles.count(True)), str(round(t2 - t, 3)), str(results_cpalleles_docids.count(True)), str(round(time.time() - t2, 3))))
