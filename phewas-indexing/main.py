@@ -8,8 +8,8 @@ from typing import Union
 from multiprocessing import Process
 
 from dotenv import load_dotenv
-import redis
 from elasticsearch import Elasticsearch
+import redis
 from retry import retry
 
 
