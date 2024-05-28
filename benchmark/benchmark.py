@@ -22,7 +22,7 @@ class Benchmark:
         self.session = requests.Session()
 
     @retry(tries=10, delay=10)
-    def _query(self, endpoint: str, variant: list, pval: float):
+    def query(self, endpoint: str, variant: list, pval: float):
         t = time.time()
         try:
             r = self.session.post(self.api_url + endpoint, headers={
@@ -133,8 +133,8 @@ class Benchmark:
                     for size in size_per_variant_type:
                         print(i, type, str(size))
                         variant = random.sample(pool[type], size)
-                        r_phewas = self._query('/phewas', variant, 0.01)
-                        r_phewas_fast = self._query('/phewas/fast', variant, 0.01)
+                        r_phewas = self.query('/phewas', variant, 0.01)
+                        r_phewas_fast = self.query('/phewas/fast', variant, 0.01)
                         if r_phewas[1] >= 0 and r_phewas_fast[1] >= 0:
                             if (r_phewas[0] - r_phewas_fast[0]) == set():
                                 f.write('{},{},{},{},{}\n'.format(type, str(size), str(round(r_phewas[1], 3)), str(round(r_phewas_fast[1], 3)), r_phewas_fast[2]))
@@ -146,5 +146,8 @@ class Benchmark:
 
 if __name__ == '__main__':
     b = Benchmark()
+    # p = b.query('/phewas', ['rs1280200828'], 0.01)
+    # pf = b.query('/phewas/fast', ['rs1280200828'], 0.01)
+    # print()
     pool = b.sample_variant(300, 100)
     b.run_test(pool, 10, [1, 2, 4, 8])
