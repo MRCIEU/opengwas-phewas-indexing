@@ -32,7 +32,11 @@ class Benchmark:
                 'pval': pval
             })
             assert r.status_code == 200
-            return set([(asso['chr'], asso['position'], asso['id']) for asso in r.json()]), time.time() - t
+            return (
+                set([(asso['chr'], asso['position'], asso['rsid'], asso['id']) for asso in r.json()]),
+                time.time() - t,
+                r.headers.get('X-PROCESSING-TIME', '')
+            )
         except Exception as e:
             print(e)
             return set(), -1
@@ -133,8 +137,7 @@ class Benchmark:
                         r_phewas_fast = self._query('/phewas/fast', variant, 0.01)
                         if r_phewas[1] >= 0 and r_phewas_fast[1] >= 0:
                             if (r_phewas[0] - r_phewas_fast[0]) == set():
-                                assert len(r_phewas_fast[0] - r_phewas[0]) >= 0
-                                f.write('{},{},{},{}\n'.format(type, str(size), str(round(r_phewas[1], 3)), str(round(r_phewas_fast[1], 3))))
+                                f.write('{},{},{},{},{}\n'.format(type, str(size), str(round(r_phewas[1], 3)), str(round(r_phewas_fast[1], 3)), r_phewas_fast[2]))
                             else:
                                 f.write('ERROR {} {} \n'.format(','.join(variant), str(r_phewas[0] - r_phewas_fast[0])))
                         else:
