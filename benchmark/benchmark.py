@@ -132,9 +132,9 @@ class Benchmark:
                             if (r_phewas[0] - r_phewas_fast[0]) == set():
                                 f.write('{},{},{},{},{}\n'.format(type, str(size), str(round(r_phewas[1], 3)), str(round(r_phewas_fast[1], 3)), r_phewas_fast[2]))
                             else:
-                                f.write('ERROR {} {} \n'.format(','.join(variant), str(r_phewas[0] - r_phewas_fast[0])))
+                                f.write('ERROR-MORE-IN-PHEWAS {} {} \n'.format(','.join(variant), str(r_phewas[0] - r_phewas_fast[0])))
                         else:
-                            f.write('ERROR {} \n'.format(','.join(variant)))
+                            f.write('ERROR-503 {} \n'.format(','.join(variant)))
 
 
 if __name__ == '__main__':
