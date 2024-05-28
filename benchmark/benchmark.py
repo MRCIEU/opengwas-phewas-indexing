@@ -65,13 +65,6 @@ class Benchmark:
                                         "value": chr_pos[1]
                                     }
                                 }
-                            },
-                            {
-                                "term": {
-                                    "COMMON": {
-                                        "value": "1"
-                                    }
-                                }
                             }
                         ]
                     }
@@ -91,8 +84,8 @@ class Benchmark:
         )
         rsids = []
         for r in response['responses']:
-            if len(r['hits']['hits']) > 0:
-                rsids.append(r['hits']['hits'][0]['_id'])
+            for h in r['hits']['hits']:
+                rsids.append(h['_id'])
         return set(rsids)
 
     def sample_variant(self, n_samples: int, max_radius: int):
