@@ -139,8 +139,9 @@ class Benchmark:
 
 if __name__ == '__main__':
     b = Benchmark()
-    # p = b.query('/phewas', ['rs1280200828'], 0.01)
-    # pf = b.query('/phewas/fast', ['rs1280200828'], 0.01)
+    variant = ['rs1439241996']
+    # p = b.query('/phewas', variant, 0.01)
+    # pf = b.query('/phewas/fast', variant, 0.01)
     # print()
     pool = b.sample_variant(300, 100)
     b.run_test(pool, 10, [1, 2, 4, 8])
