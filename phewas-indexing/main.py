@@ -243,6 +243,8 @@ def single_process(proc_id: int, tasks: list) -> None:
 
 if __name__ == '__main__':
     pi = PhewasIndexing()
+    # print(pi.count_members_in_redis())
+    # exit(0)
     n_proc = int(os.environ['N_PROC'])
     while True:
         while len(tasks := pi.list_pending_tasks_in_redis()) > 0:
