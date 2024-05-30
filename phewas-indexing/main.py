@@ -31,7 +31,7 @@ class PhewasIndexing:
         :return: list of GWAS IDs
         """
         self.redis.select(int(os.environ['REDIS_DB_TASKS']))
-        tasks = self.redis.lrange('pending', 0, -1)
+        tasks = self.redis.smembers('pending')
         logging.info('Number of pending tasks: ' + str(len(tasks)))
         return [t.decode('ascii') for t in tasks]
 
@@ -183,7 +183,7 @@ class PhewasIndexing:
         :return: None
         """
         self.redis.select(int(os.environ['REDIS_DB_TASKS']))
-        self.redis.lrem('pending', 0, gwas_id)
+        self.redis.srem('pending', gwas_id)
         if successful:
             self.redis.zadd('completed', {gwas_id: n_docs})
             logging.info('Reported {} as completed with {} docs'.format(gwas_id, n_docs))
