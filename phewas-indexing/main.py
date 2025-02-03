@@ -31,7 +31,7 @@ class PhewasIndexing:
         :return: list of GWAS IDs
         """
         self.redis.select(int(os.environ['REDIS_DB_TASKS']))
-        tasks = self.redis.smembers('pending')
+        tasks = self.redis.smembers('phewas_pending')
         logging.info('Number of pending tasks: ' + str(len(tasks)))
         return [t.decode('ascii') for t in tasks]
 
@@ -176,19 +176,19 @@ class PhewasIndexing:
 
     def report_task_status_to_redis(self, gwas_id: str, successful: bool, n_docs: int) -> None:
         """
-        Remove a task from 'pending' and add it to 'completed' or 'failed'
+        Remove a task from 'phewas_pending' and add it to 'phewas_completed' or 'phewas_failed'
         :param gwas_id: the full GWAS ID
         :param successful: whether the task is successful or not
         :param n_docs: number of Elasticsearch documents
         :return: None
         """
         self.redis.select(int(os.environ['REDIS_DB_TASKS']))
-        self.redis.srem('pending', gwas_id)
+        self.redis.srem('phewas_pending', gwas_id)
         if successful:
-            self.redis.zadd('completed', {gwas_id: n_docs})
+            self.redis.zadd('phewas_completed', {gwas_id: n_docs})
             logging.info('Reported {} as completed with {} docs'.format(gwas_id, n_docs))
         else:
-            self.redis.zadd('failed', {gwas_id: int(time.time())})
+            self.redis.zadd('phewas_failed', {gwas_id: int(time.time())})
             logging.info('Reported {} as failed'.format(gwas_id))
 
     def count_members_in_redis(self) -> (int, int):
